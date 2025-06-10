@@ -5,15 +5,36 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: daflynn <daflynn@student.42berlin.de>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/06/10 11:02:15 by daflynn           #+#    #+#             */
-/*   Updated: 2025/06/10 11:02:34 by daflynn          ###   ########.fr       */
+/*   Created: 2025/06/10 16:53:31 by daflynn           #+#    #+#             */
+/*   Updated: 2025/06/10 16:53:36 by daflynn          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "pipex.h"
 
-pid_t	fork_and_execute(int input_fd, int output_fd, t_descriptor *desc,
-		char *cmd, char **envp)
+static void	child_process_logic(t_exec_params *p)
+{
+	if (dup2(p->input_fd, STDIN_FILENO) == -1)
+	{
+		perror("dup2 input failed");
+		closer(p->desc->fd_in, p->desc->fd_out, p->desc->pipefd[0],
+			p->desc->pipefd[1]);
+		exit(EXIT_FAILURE);
+	}
+	if (dup2(p->output_fd, STDOUT_FILENO) == -1)
+	{
+		perror("dup2 output failed");
+		closer(p->desc->fd_in, p->desc->fd_out, p->desc->pipefd[0],
+			p->desc->pipefd[1]);
+		exit(EXIT_FAILURE);
+	}
+	closer(p->desc->fd_in, p->desc->fd_out, p->desc->pipefd[0],
+		p->desc->pipefd[1]);
+	execute_command(p->cmd_str, p->envp);
+	exit(EXIT_FAILURE);
+}
+
+pid_t	fork_and_execute(t_exec_params *params)
 {
 	pid_t	pid;
 
@@ -21,31 +42,17 @@ pid_t	fork_and_execute(int input_fd, int output_fd, t_descriptor *desc,
 	if (pid == FORK_FAILED)
 	{
 		perror("fork failed");
-		closer(desc->fd_in, desc->fd_out, desc->pipefd[0], desc->pipefd[1]);
+		closer(params->desc->fd_in, params->desc->fd_out,
+			params->desc->pipefd[0], params->desc->pipefd[1]);
 		exit(EXIT_FAILURE);
 	}
 	if (pid == IS_CHILD)
 	{
-		if (dup2(input_fd, STDIN_FILENO) == -1)
-		{
-			perror("dup2 input failed");
-			closer(desc->fd_in, desc->fd_out, desc->pipefd[0], desc->pipefd[1]);
-			exit(EXIT_FAILURE);
-		}
-		if (dup2(output_fd, STDOUT_FILENO) == -1)
-		{
-			perror("dup2 output failed");
-			closer(desc->fd_in, desc->fd_out, desc->pipefd[0], desc->pipefd[1]);
-			exit(EXIT_FAILURE);
-		}
-		closer(desc->fd_in, desc->fd_out, desc->pipefd[0], desc->pipefd[1]);
-		execute_command(cmd, envp);
-		exit(EXIT_FAILURE);
+		child_process_logic(params);
 	}
 	return (pid);
 }
 
-/* Main Function */
 void	execute_command(char *cmd, char **envp)
 {
 	char	**args;
